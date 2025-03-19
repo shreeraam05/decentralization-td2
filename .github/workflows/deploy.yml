@@ -1,0 +1,52 @@
+name: Deploy to IPFS using Pinata
+
+on:
+  push:
+    branches:
+      - main  # Trigger this workflow on pushes to the main branch
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      # Step 1: Checkout the repository
+      - name: Checkout Repository
+        uses: actions/checkout@v3
+
+      # Step 2: Install Dependencies (zip and jq)
+      - name: Install Dependencies
+        run: |
+          sudo apt update
+          sudo apt install zip -y jq -y
+
+      # Step 3: Zip static files
+      - name: Zip Static Files
+        run: |
+          zip -r website.zip . -x "*.git*"  # Exclude .git files
+          ls -lah website.zip  # Verify the zip file is created
+
+      # Step 4: Upload to IPFS via Pinata
+      - name: Upload to IPFS via Pinata
+        env:
+          PINATA_API_KEY: ${{ secrets.PINATA_API_KEY }}
+          PINATA_SECRET_API_KEY: ${{ secrets.PINATA_SECRET_API_KEY }}
+        run: |
+          curl -X POST "https://api.pinata.cloud/pinning/pinFileToIPFS" \
+          -H "pinata_api_key: $PINATA_API_KEY" \
+          -H "pinata_secret_api_key: $PINATA_SECRET_API_KEY" \
+          -H "Content-Type: multipart/form-data" \
+          -F "file=@website.zip" -v > response.json
+
+          echo "IPFS Response:"
+          cat response.json
+
+          IPFS_HASH=$(jq -r '.IpfsHash' response.json)
+          echo "IPFS_HASH=$IPFS_HASH" >> $GITHUB_ENV  # Save to GitHub Actions environment
+
+      # Step 5: Print the IPFS URL (Fixed)
+      - name: Print IPFS URL
+        run: |
+          echo "Website deployed to IPFS: https://gateway.pinata.cloud/ipfs/$IPFS_HASH"
+        env:
+          IPFS_HASH: ${{ env.IPFS_HASH }}
